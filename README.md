@@ -23,7 +23,7 @@ Projektna spletna aplikacija, razvita z uporabo **Flask (Python)**, prikazuje in
 1. Kloniraj repozitorij:
 ```bash
 git clone https://github.com/tvoje_uporabnisko_ime/ime-projekta.git
-cd ime-projekta
+cd projekt
 
 2. Aktiviraj virtuelno okolje
 python3 -m venv venv
