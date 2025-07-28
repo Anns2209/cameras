@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+    <meta charset="UTF-8">
+    <title>Zemljevid kamer in temperatur</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+ <style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+    }
+    #map {
+        height: 100vh;
+        width: 100%;
+    }
+    #login-form {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background-color: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+    }
+
+    .info.legend {
+        background: white;
+        padding: 8px 12px;
+        font-size: 13px;
+        line-height: 1.5;
+        border-radius: 5px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.2);
+    }
+</style>
+</head>
+<body>
+
+    <div id="login-form">
+        <label for="username">Uporabniško ime:</label><br>
+        <input type="text" id="username" value="ana"><br>
+        <label for="password">Geslo:</label><br>
+        <input type="password" id="password" value="potk123!"><br><br>
+        <button onclick="login()">Prijava</button>
+        <p id="login-status" style="color: red; display: none;">Prijava neuspešna</p>
+    </div>
+
+    <div id="map" style="display: none;"></div>
+
+    <script>
+        const apiBaseUrl = "http://localhost:5001"; // Zamenjaj z dejanskim IP/host
+
+        let jwtToken = null;
+
+        async function login() {
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+
+            const response = await fetch(`${apiBaseUrl}/login`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ username, password })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                jwtToken = data.access_token;
+
+                // Prikaz zemljevida
+                document.getElementById("login-form").style.display = "none";
+                document.getElementById("map").style.display = "block";
+                initMap();
+            } else {
+                document.getElementById("login-status").style.display = "block";
+            }
+        }
+
+        function initMap() {
+            const map = L.map('map').setView([46.0569, 14.5058], 8);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            fetchDataAndRenderMarkers(map);
+        }
+
+async function fetchDataAndRenderMarkers(map) {
+    try {
+        const [kameraRes, tempRes] = await Promise.all([
+            fetch(`${apiBaseUrl}/getKamere`, {
+                headers: { Authorization: `Bearer ${jwtToken}` }
+            }),
+            fetch(`${apiBaseUrl}/getTemp`, {
+                headers: { Authorization: `Bearer ${jwtToken}` }
+            })
+        ]);
+
+        const cameras = await kameraRes.json();
+        const temperatures = await tempRes.json();
+
+        //  Kamere – modri markerji
+        cameras.forEach(cam => {
+            const matchingTemp = temperatures.find(t =>
+                Math.abs(t.latitude - cam.latitude) < 0.01 &&
+                Math.abs(t.longitude - cam.longitude) < 0.01
+            );
+
+            const tempInfo = matchingTemp
+                ? `<p><strong>Temperatura:</strong> ${matchingTemp.air_temperature} &#8451;</p>`
+                : '<p><em>Ni podatkov o temperaturi</em></p>';
+
+            const popupHtml = `
+                <div style="font-size: 14px;">
+                    <h3>${cam.title}</h3>
+                    <img src="${cam.image_link}" alt="Slika kamere" style="width: 100%; border: 1px solid #ccc; margin-bottom: 5px;">
+                    <p><strong>Lokacija:</strong> (${cam.latitude}, ${cam.longitude})</p>
+                    ${tempInfo}
+                </div>
+            `;
+
+            L.marker([cam.latitude, cam.longitude]).addTo(map)
+                .bindPopup(popupHtml);
+        });
+
+        //  Temperature – rdeči krogi
+        temperatures.forEach(temp => {
+            const popup = `
+                <div style="font-size: 14px;">
+                    <h3>🌡️ ${temp.source_name}</h3>
+                    <p><strong>Temperatura:</strong> ${temp.air_temperature} &#8451;</p>
+                    <p><strong>Lokacija:</strong> (${temp.latitude}, ${temp.longitude})</p>
+                </div>
+            `;
+
+            L.circleMarker([temp.latitude, temp.longitude], {
+                radius: 8,
+                fillColor: 'red',
+                color: '#900',
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.7
+            }).addTo(map).bindPopup(popup);
+        });
+
+        // legenda 
+        const legend = L.control({ position: 'bottomright' });
+        legend.onAdd = function (map) {
+            const div = L.DomUtil.create('div', 'info legend');
+            div.innerHTML += `
+                <h4>Legenda</h4>
+                <i style="background: red; border-radius: 50%; display: inline-block; width: 12px; height: 12px; margin-right: 6px;"></i> Temperaturna postaja<br>
+                <img src="https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png" style="height: 20px; vertical-align: middle; margin-right: 6px;"> Kamera
+
+            `;
+            return div;
+        };
+        legend.addTo(map);
+
+    } catch (err) {
+        console.error("Napaka pri nalaganju podatkov:", err);
+    }
+}
+
+
+    </script>
+</body>
+</html>
+

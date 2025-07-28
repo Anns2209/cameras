@@ -1,0 +1,7 @@
+flask
+requests
+flask-jwt-extended
+python-dotenv
+Flask-Selfdoc
+gunicorn
+mysql-connector-python
